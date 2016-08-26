@@ -12,16 +12,19 @@ class account_aged_trial_balance_detail(models.TransientModel):
     _name = 'account.aged.balance.detail'
     _description = 'Account aged balance detail report'
     
+    def compute_default_company_id(self):
+        return self.env['res.users'].browse(self.env.uid).company_id
+
     period_length = fields.Integer(string='Period Length (days)', default=30, required=True)
     direction_selection = fields.Selection([('past','Past'), ('future','Future')], default="past", string='Analysis Direction', required=True)
-    journal_ids = fields.Many2many(comodel_name='account.journal', string='Journals', required=True)
     date_from = fields.Date(default=lambda *a: time.strftime('%Y-%m-%d'))
+    company_id = fields.Many2one(comodel_name='res.company', string='Company', required=True, default=compute_default_company_id)
 
     def _print_report(self, data):
         res = {}
 
         data = self.pre_print_report(data)
-        data['form'].update(self.read(['period_length', 'direction_selection'])[0])
+        data['form'].update(self.read(['period_length', 'direction_selection', 'company_id'])[0])
 
         period_length = data['form']['period_length']
         if period_length<=0:
@@ -52,4 +55,5 @@ class account_aged_trial_balance_detail(models.TransientModel):
         data['form'].update(res)
         if data.get('form',False):
             data['ids']=[data['form'].get('chart_account_id',False)]
+
         return self.env['report'].get_action(self, 'report_agedbalancedetail.report_agedbalancedetail', data=data)

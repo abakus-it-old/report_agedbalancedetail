@@ -12,8 +12,8 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
         self.total_account = []
         self.localcontext.update({
             'time': time,
+            'get_lines': self._get_lines,           
             'get_lines_with_out_partner': self._get_lines_with_out_partner,
-            'get_lines': self._get_lines,
             'get_total': self._get_total,
             'get_direction': self._get_direction,
             'get_for_period': self._get_for_period,
@@ -41,6 +41,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
 
     def _get_lines(self, form):
         res = []
+        company_id = form['company_id'][0]
         move_state = ['draft','posted']
         if self.target_move == 'posted':
             move_state = ['posted']
@@ -59,6 +60,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                     AND ' + self.query + ' \
                 ORDER BY res_partner.name', (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from,))
         partners = self.cr.dictfetchall()
+        
         ## mise a 0 du total
         for i in range(7):
             self.total_account.append(0)
@@ -73,6 +75,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
         self.cr.execute('SELECT l.partner_id, SUM(l.debit-l.credit) \
                     FROM account_move_line AS l, account_account, account_move am \
                     WHERE (l.account_id = account_account.id) AND (l.move_id=am.id) \
+                    AND (l.company_id = %s) \
                     AND (am.state IN %s)\
                     AND (account_account.type IN %s)\
                     AND (l.partner_id IN %s)\
@@ -81,7 +84,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                     AND ' + self.query + '\
                     AND account_account.active\
                     AND (l.date <= %s)\
-                    GROUP BY l.partner_id ', (tuple(move_state), tuple(self.ACCOUNT_TYPE), tuple(partner_ids), self.date_from, self.date_from,))
+                    GROUP BY l.partner_id ', (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), tuple(partner_ids), self.date_from, self.date_from,))
         t = self.cr.fetchall()
         for i in t:
             totals[i[0]] = i[1]
@@ -91,7 +94,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
         # Each history will contain: history[1] = {'<partner_id>': <partner_debit-credit>}
         history = []
         for i in range(5):
-            args_list = (tuple(move_state), tuple(self.ACCOUNT_TYPE), tuple(partner_ids),self.date_from,)
+            args_list = (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), tuple(partner_ids),self.date_from,)
             dates_query = '(COALESCE(l.date_maturity,l.date)'
             if form[str(i)]['start'] and form[str(i)]['stop']:
                 dates_query += ' BETWEEN %s AND %s)'
@@ -113,6 +116,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                     LEFT JOIN res_currency c ON (l.currency_id=c.id)
                     LEFT JOIN account_move am ON (am.id=l.move_id)
                     WHERE (l.account_id = acc.id) AND (l.move_id=am.id)
+                        AND (l.company_id = %s) \
                         AND (am.state IN %s)
                         AND (acc.type IN %s)
                         AND (l.partner_id IN %s)
@@ -165,6 +169,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                             LEFT JOIN res_currency c ON (l.currency_id=c.id) \
                             LEFT JOIN account_move am ON (am.id=l.move_id) \
                             WHERE (l.account_id=acc.id) AND (l.move_id=am.id) \
+                                AND (l.company_id = %s) \
                                 AND (am.state IN %s)\
                                 AND (acc.type IN %s)\
                                 AND (COALESCE(l.date_maturity, l.date) < %s)\
@@ -174,7 +179,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                                 AND '+ self.query + '\
                                 AND acc.active\
                                 AND (l.date <= %s)\
-                            GROUP BY l.partner_id, l.date_maturity, l.ref, j.code, am.name, acc.code', (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, tuple(partner_ids),self.date_from, self.date_from,))
+                            GROUP BY l.partner_id, l.date_maturity, l.ref, j.code, am.name, acc.code', (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, tuple(partner_ids),self.date_from, self.date_from,))
             t = self.cr.fetchall()
             
             line_dict = {}
@@ -198,6 +203,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                             LEFT JOIN res_currency c ON (l.currency_id=c.id) \
                             LEFT JOIN account_move am ON (am.id=l.move_id) \
                             WHERE (l.account_id=acc.id) AND (l.move_id=am.id)\
+                                AND (l.company_id = %s) \
                                 AND (am.state IN %s)\
                                 AND (acc.type IN %s)\
                                 AND (COALESCE(l.date_maturity,l.date) > %s)\
@@ -207,7 +213,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                                 AND '+ self.query + '\
                                 AND acc.active\
                                 AND (l.date <= %s)\
-                                GROUP BY l.partner_id, l.date_maturity, l.ref, j.code, am.name, acc.code', (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, tuple(partner_ids), self.date_from, self.date_from,))
+                                GROUP BY l.partner_id, l.date_maturity, l.ref, j.code, am.name, acc.code', (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, tuple(partner_ids), self.date_from, self.date_from,))
             t = self.cr.fetchall()
             
             line_dict = {}
@@ -222,7 +228,6 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                 line_dict[str(i[0])+'dict'].append(move_line_info)
 
             history.append(line_dict)
-            
             
         for partner in partners:
             values = {}
@@ -248,13 +253,14 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             for i in range(6):
                 if history[i].has_key(str(partner['id'])+'dict'):
                     for line in history[i][str(partner['id'])+'dict']:
-                        line['name'] = '%s|%s|%s|%s|%s'%(line['due_date'],line['journal'],line['ref'],line['account'],line['entry_label'])
-                        line[str(i)] = line['amount']
-                        line['total'] = line['amount']
-                        for j in range(6):
-                            if j != i:
-                                line[str(j)] = 0.0
-                        lines.insert( 0, line)
+                        if line['amount'] and line['amount'] != 0:
+                            line['name'] = '%s|%s|%s|%s|%s'%(line['due_date'],line['journal'],line['ref'],line['account'],line['entry_label'])
+                            line[str(i)] = line['amount']
+                            line['total'] = line['amount']
+                            for j in range(6):
+                                if j != i:
+                                    line[str(j)] = 0.0
+                            lines.insert( 0, line)
             values['lines'] = sorted(lines, key=lambda k: k['due_date'], reverse=True)
             #NEW END
 
@@ -273,8 +279,9 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             ## Add for total
             self.total_account[(i+1)] = self.total_account[(i+1)] + (total and total[0] or 0.0)
             values['name'] = partner['name']
-
-            res.append(values)
+            
+            if values['total'] and values['total'] != 0:
+                res.append(values)
 
         total = 0.0
         totals = {}
@@ -282,11 +289,13 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             total += float(r['total'] or 0.0)
             for i in range(5)+['direction']:
                 totals.setdefault(str(i), 0.0)
-                totals[str(i)] += float(r[str(i)] or 0.0)
+                totals[str(i)] += float(r[str(i)] or 0.0)        
+
         return res
 
     def _get_lines_with_out_partner(self, form):
         res = []
+        company_id = form['company_id'][0]
         move_state = ['draft','posted']
         if self.target_move == 'posted':
             move_state = ['posted']
@@ -298,6 +307,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
         self.cr.execute('SELECT SUM(l.debit-l.credit) \
                     FROM account_move_line AS l, account_account, account_move am \
                     WHERE (l.account_id = account_account.id) AND (l.move_id=am.id)\
+                    AND (l.company_id = %s) \
                     AND (am.state IN %s)\
                     AND (l.partner_id IS NULL)\
                     AND (account_account.type IN %s)\
@@ -305,7 +315,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                     OR (l.reconcile_id IN (SELECT recon.id FROM account_move_reconcile AS recon WHERE recon.create_date > %s )))\
                     AND ' + self.query + '\
                     AND (l.date <= %s)\
-                    AND account_account.active ',(tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from,))
+                    AND account_account.active ',(company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from,))
         t = self.cr.fetchall()
         for i in t:
             totals['Unknown Partner'] = i[0]
@@ -314,6 +324,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             self.cr.execute('SELECT SUM(l.debit-l.credit) \
                         FROM account_move_line AS l, account_account, account_move am\
                         WHERE (l.account_id=account_account.id) AND (l.move_id=am.id)\
+                        AND (l.company_id = %s) \
                         AND (am.state IN %s)\
                         AND (l.partner_id IS NULL)\
                         AND (account_account.type IN %s)\
@@ -321,7 +332,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                         AND ((l.reconcile_id IS NULL)\
                         OR (l.reconcile_id IN (SELECT recon.id FROM account_move_reconcile AS recon WHERE recon.create_date > %s )))\
                         AND '+ self.query + '\
-                        AND account_account.active ', (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from))
+                        AND account_account.active ', (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from))
             t = self.cr.fetchall()
             for i in t:
                 future_past['Unknown Partner'] = i[0]
@@ -329,6 +340,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             self.cr.execute('SELECT SUM(l.debit-l.credit) \
                     FROM account_move_line AS l, account_account, account_move am \
                     WHERE (l.account_id=account_account.id) AND (l.move_id=am.id)\
+                        AND (l.company_id = %s) \
                         AND (am.state IN %s)\
                         AND (l.partner_id IS NULL)\
                         AND (account_account.type IN %s)\
@@ -336,14 +348,14 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
                         AND ((l.reconcile_id IS NULL)\
                         OR (l.reconcile_id IN (SELECT recon.id FROM account_move_reconcile AS recon WHERE recon.create_date > %s )))\
                         AND '+ self.query + '\
-                        AND account_account.active ', (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from))
+                        AND account_account.active ', (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from, self.date_from))
             t = self.cr.fetchall()
             for i in t:
                 future_past['Unknown Partner'] = i[0]
         history = []
 
         for i in range(5):
-            args_list = (tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from,)
+            args_list = (company_id, tuple(move_state), tuple(self.ACCOUNT_TYPE), self.date_from,)
             dates_query = '(COALESCE(l.date_maturity,l.date)'
             if form[str(i)]['start'] and form[str(i)]['stop']:
                 dates_query += ' BETWEEN %s AND %s)'
@@ -358,6 +370,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             self.cr.execute('SELECT SUM(l.debit-l.credit)\
                     FROM account_move_line AS l, account_account, account_move am \
                     WHERE (l.account_id = account_account.id) AND (l.move_id=am.id)\
+                        AND (l.company_id = %s) \
                         AND (am.state IN %s)\
                         AND (account_account.type IN %s)\
                         AND (l.partner_id IS NULL)\
@@ -403,7 +416,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
         self.total_account[(i+1)] = self.total_account[(i+1)] + (total and total[0] or 0.0)
         values['name'] = 'Unknown Partner'
 
-        if values['total']:
+        if values['total'] and values['total'] != 0:
             res.append(values)
 
         total = 0.0
@@ -413,6 +426,7 @@ class aged_trial_detail_report(report_sxw.rml_parse, common_report_header):
             for i in range(5)+['direction']:
                 totals.setdefault(str(i), 0.0)
                 totals[str(i)] += float(r[str(i)] or 0.0)
+        
         return res
 
     def _get_total(self,pos):
